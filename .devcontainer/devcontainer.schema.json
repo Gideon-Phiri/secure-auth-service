@@ -1,0 +1,230 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Dev Container",
+  "description": "Schema for devcontainer.json files used by Visual Studio Code Remote - Containers / Dev Containers.",
+  "type": "object",
+  "definitions": {
+    "dockerBuild": {
+      "type": "object",
+      "properties": {
+        "dockerfile": {
+          "type": "string",
+          "description": "Path to the Dockerfile relative to the context."
+        },
+        "context": {
+          "type": "string",
+          "description": "Build context to use."
+        },
+        "args": {
+          "type": "object",
+          "additionalProperties": {
+            "type": ["string", "number", "boolean"]
+          },
+          "description": "Build arguments passed to docker build."
+        },
+        "target": {
+          "type": "string",
+          "description": "Build target for multi-stage builds."
+        },
+        "cacheFrom": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Images to consider as cache sources."
+        },
+        "secrets": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "id": { "type": "string" },
+              "src": { "type": "string" }
+            },
+            "required": ["id", "src"],
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": true
+    },
+    "buildType": {
+      "oneOf": [{ "type": "string" }, { "$ref": "#/definitions/dockerBuild" }]
+    },
+    "mount": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "remoteUser": {
+      "type": "string"
+    }
+  },
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Human-friendly name for the dev container configuration."
+    },
+    "build": { "$ref": "#/definitions/buildType" },
+    "image": {
+      "type": "string",
+      "description": "Docker image to use for the dev container."
+    },
+    "dockerFile": {
+      "type": "string",
+      "description": "Path to the Dockerfile (deprecated: use build.dockerfile)."
+    },
+    "dockerComposeFile": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Paths to docker-compose files. Can be relative paths."
+    },
+    "service": {
+      "type": "string",
+      "description": "The service defined in the docker-compose file to use as the dev container."
+    },
+    "workspaceFolder": {
+      "type": "string",
+      "description": "Path inside the container that contains your workspace."
+    },
+    "workspaceMount": {
+      "type": "string",
+      "description": "Mount specification used to mount the workspace folder (e.g., source=${localWorkspaceFolder},target=/workspace,type=bind)."
+    },
+    "shutdownAction": {
+      "type": "string",
+      "enum": ["none", "stopCompose", "stopContainer"],
+      "description": "What to do with the composition when closing VS Code."
+    },
+    "extensions": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "List of VS Code extensions to install in the dev container."
+    },
+    "settings": {
+      "type": "object",
+      "description": "VS Code settings to apply in the dev container.",
+      "additionalProperties": true
+    },
+    "postCreateCommand": {
+      "type": "string",
+      "description": "Command to run after creating the container for the first time."
+    },
+    "postStartCommand": {
+      "type": "string",
+      "description": "Command to run after starting the container."
+    },
+    "postAttachCommand": {
+      "type": "string",
+      "description": "Command to run after attaching to the container."
+    },
+    "remoteUser": {
+      "type": "string",
+      "description": "User to use when connecting to the container."
+    },
+    "containerUser": {
+      "type": "string",
+      "deprecated": true,
+      "description": "Deprecated alias for remoteUser."
+    },
+    "mounts": { "$ref": "#/definitions/mount" },
+    "runArgs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Additional arguments to pass to docker run."
+    },
+    "overrideCommand": {
+      "type": "boolean",
+      "description": "Whether to override the command with the container start command."
+    },
+    "initializeCommand": {
+      "type": "string",
+      "description": "Command to initialize container before starting."
+    },
+    "features": {
+      "type": "object",
+      "additionalProperties": {
+        "oneOf": [
+          { "type": "boolean" },
+          {
+            "type": "object",
+            "additionalProperties": true
+          }
+        ]
+      },
+      "description": "Dev container features to apply (codespaces/dev container features)."
+    },
+    "onCreateCommand": {
+      "type": "string",
+      "description": "Deprecated alias for postCreateCommand."
+    },
+    "customizations": {
+      "type": "object",
+      "properties": {
+        "vscode": {
+          "type": "object",
+          "properties": {
+            "extensions": {
+              "type": "array",
+              "items": { "type": "string" }
+            }
+          },
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": true
+    },
+    "forwardPorts": {
+      "type": "array",
+      "items": { "type": "integer" },
+      "description": "Ports to forward from the container to the host."
+    },
+    "portsAttributes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "properties": {
+          "label": { "type": "string" },
+          "onAutoForward": {
+            "type": "string",
+            "enum": ["notify", "openBrowser"]
+          },
+          "requireLocalPort": { "type": "boolean" }
+        },
+        "additionalProperties": true
+      }
+    },
+    "workspaceMounts": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "workspaceFolder2": {
+      "type": "string",
+      "deprecated": true
+    },
+    "containerEnv": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Environment variables to set in the container."
+    },
+    "serviceStartTimeout": {
+      "type": "integer",
+      "description": "Timeout in seconds to wait for the service to start."
+    },
+    "updateContentCommand": {
+      "type": "string",
+      "description": "Command to run when content in the container needs to be updated."
+    },
+    "remoteEnv": {
+      "type": "object",
+      "additionalProperties": { "type": "string" },
+      "description": "Environment variables available to VS Code during remote development."
+    },
+    "overrideConfigFile": {
+      "type": "string",
+      "description": "File containing override configuration to apply to the dev container."
+    }
+  },
+  "additionalProperties": true
+}
