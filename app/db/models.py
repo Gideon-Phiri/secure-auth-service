@@ -14,5 +14,7 @@ class User(SQLModel, table=True):
     is_superuser: bool = False
     failed_attempts: int = 0
     locked_until: Optional[datetime] = None
+    email_verified: bool = False
+    email_verification_token: Optional[str] = None
     created_at: datetime = Field(default_factory=utc_now)
     updated_at: datetime = Field(default_factory=utc_now)

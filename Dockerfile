@@ -1,23 +1,29 @@
-FROM python:3.11-slim
+FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 
-# Create non-root user
-RUN groupadd -r vscode && useradd -r -g vscode -m -s /bin/bash vscode
+# Create non-root user 'meltah' for security
+RUN groupadd -r meltah && useradd -r -g meltah -m -s /bin/bash meltah
+
+RUN mkdir -p /app \
+    && chown -R meltah:meltah /app
 
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y build-essential libpq-dev curl && \
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends build-essential libpq-dev curl git && \
     rm -rf /var/lib/apt/lists/* && \
-    chown -R vscode:vscode /app
+    chown -R meltah:meltah /app
 
-USER vscode
+USER meltah
 
 COPY requirements.txt .
 RUN pip install --user --no-cache-dir -r requirements.txt
 
 COPY . .
+
+
 
 EXPOSE 8000
 

@@ -1,25 +1,117 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import SQLModel
+from fastapi import APIRouter, Depends, HTTPException, status, Request
+from datetime import datetime, timedelta, timezone
+from fastapi.responses import JSONResponse
+from email.message import EmailMessage
+import os, smtplib, secrets, re
+from sqlmodel import select
+
 from app.schemas.user import UserCreate
 from app.schemas.token import Token
 from app.db.session import get_session
-from app.db.crud import create_user, authenticate_user
+from app.db.crud import create_user, authenticate_user, get_user_by_email
 from app.core.security import create_access_token, create_refresh_token
-from fastapi.responses import JSONResponse
+from app.core.rate_limit import limiter
+from app.db.models import User
 
 router = APIRouter()
 
+
+
+def validate_password_complexity(password: str) -> None:
+    errors = []
+    if len(password) < 8:
+        errors.append("Password must be at least 8 characters long.")
+    if not re.search(r"[A-Z]", password):
+        errors.append("Password must contain at least one uppercase letter.")
+    if not re.search(r"[a-z]", password):
+        errors.append("Password must contain at least one lowercase letter.")
+    if not re.search(r"[0-9]", password):
+        errors.append("Password must contain at least one digit.")
+    if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+        errors.append("Password must contain at least one special character.")
+    if errors:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=" ".join(errors))
+
+
+def send_verification_email(email: str, token: str):
+    smtp_host = os.getenv("SMTP_HOST")
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_user = os.getenv("SMTP_USER")
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    email_from = os.getenv("EMAIL_FROM", smtp_user)
+    verify_url = f"http://localhost:8000/auth/verify-email?token={token}"
+    subject = "Verify your email address"
+    body = f"Welcome! Please verify your email by clicking this link: {verify_url}"
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = email_from
+    msg["To"] = email
+    msg.set_content(body)
+    try:
+        with smtplib.SMTP(smtp_host, smtp_port) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+            server.send_message(msg)
+    except Exception as e:
+        print(f"Failed to send email: {e}")
+
 @router.post("/register", response_model=None, status_code=status.HTTP_201_CREATED)
-async def register(user_in: UserCreate, session=Depends(get_session)):
+@limiter.limit("5/minute")
+async def register(request: Request, user_in: UserCreate, session=Depends(get_session)):
+    validate_password_complexity(user_in.password)
     existing = await create_user(session, user_in.email, user_in.password)
-    return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "user created", "id": str(existing.id)})
+    # Generate verification token
+    token = secrets.token_urlsafe(16)
+    existing.email_verification_token = token
+    existing.email_verified = False
+    await session.commit()
+    await session.refresh(existing)
+    send_verification_email(existing.email, token)
+    return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "user created, verification email sent", "id": str(existing.id)})
+@router.get("/verify-email")
+async def verify_email(token: str, session=Depends(get_session)):
+    result = await session.execute(select(User).where(User.email_verification_token == token))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired token")
+    user.email_verified = True
+    user.email_verification_token = None
+    await session.commit()
+    return {"message": "Email verified successfully"}
+
 
 @router.post("/login", response_model=Token)
-async def login(form_data: UserCreate, session=Depends(get_session)):
-    user = await authenticate_user(session, form_data.email, form_data.password)
-    if not user:
+@limiter.limit("10/minute")
+async def login(request: Request, form_data: UserCreate, session=Depends(get_session)):
+    user = await get_user_by_email(session, form_data.email)
+    now = datetime.now(timezone.utc)
+    # Check if account is locked
+    if user and user.locked_until:
+        # Ensure locked_until is timezone-aware for comparison
+        locked_until = user.locked_until
+        if locked_until.tzinfo is None:
+            locked_until = locked_until.replace(tzinfo=timezone.utc)
+        if locked_until > now:
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Account locked until {locked_until}")
+    # Authenticate user
+    authed_user = await authenticate_user(session, form_data.email, form_data.password)
+    if not authed_user:
+        # Increment failed_attempts
+        if user:
+            user.failed_attempts += 1
+            # Lock account if too many failed attempts
+            if user.failed_attempts >= 5:
+                user.locked_until = now + timedelta(minutes=15)
+                user.failed_attempts = 0
+            await session.commit()
+            await session.refresh(user)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect credentials")
-    access_token = create_access_token(subject=str(user.id))
-    refresh_token = create_refresh_token(subject=str(user.id))
+    # Reset failed_attempts on successful login
+    authed_user.failed_attempts = 0
+    authed_user.locked_until = None
+    await session.commit()
+    await session.refresh(authed_user)
+    access_token = create_access_token(subject=str(authed_user.id))
+    refresh_token = create_refresh_token(subject=str(authed_user.id))
     return Token(access_token=access_token, refresh_token=refresh_token)
 

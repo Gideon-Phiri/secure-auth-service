@@ -19,7 +19,7 @@
     }
   },
   "postCreateCommand": "pip install --upgrade pip && pip install --no-cache-dir -r requirements.txt",
-  "remoteUser": "vscode",
+  "remoteUser": "meltah",
   "forwardPorts": [8000],
   "portsAttributes": {
     "8000": {

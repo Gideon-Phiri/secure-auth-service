@@ -6,26 +6,30 @@ services:
     volumes:
       - ..:/app:cached
     command: sleep infinity
-    environment:
-      - POSTGRES_USER=authuser
-      - POSTGRES_PASSWORD=${DB_PASSWORD:-secure_random_password_change_me}
-      - POSTGRES_DB=authdb
-      - DATABASE_URL=postgresql+asyncpg://authuser:${DB_PASSWORD:-secure_random_password_change_me}@db:5432/authdb
-      - SECRET_KEY=${SECRET_KEY:-please_change_this_secret_key_in_production}
+    env_file:
+      - ../.env
     depends_on:
       - db
+    deploy:
+      resources:
+        limits:
+          cpus: "1.00"
+          memory: 1024M
 
   db:
     image: postgres:15
-    environment:
-      POSTGRES_USER: authuser
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-secure_random_password_change_me}
-      POSTGRES_DB: authdb
+    env_file:
+      - ../.env
     volumes:
       - pgdata:/var/lib/postgresql/data
     # Remove port exposure for security
     # ports:
     #   - "5432:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: "0.50"
+          memory: 512M
 
 volumes:
   pgdata:

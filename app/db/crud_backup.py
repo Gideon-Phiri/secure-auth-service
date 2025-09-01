@@ -1,5 +1,5 @@
 from typing import Optional
-from sqlmodel import Session, select
+from sqlmodel import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.db.models import User
 from app.core.security import get_password_hash, verify_password
@@ -10,8 +10,8 @@ async def get_user(session: AsyncSession, user_id: str) -> Optional[User]:
     try:
         user_uuid = uuid.UUID(user_id)
         statement = select(User).where(User.id == user_uuid)
-        result = await session.execute(statement)
-        return result.scalar_one_or_none()
+    result = await session.execute(statement)
+    return result.scalars().first()
     except ValueError:
         return None
 
@@ -19,7 +19,7 @@ async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]
     """Get user by email"""
     statement = select(User).where(User.email == email)
     result = await session.execute(statement)
-    return result.scalar_one_or_none()
+    return result.scalars().first()
 
 async def create_user(session: AsyncSession, email: str, password: str) -> User:
     """Create a new user"""
