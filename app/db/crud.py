@@ -48,8 +48,8 @@ async def authenticate_user(session: AsyncSession, email: str, password: str) ->
     user = await get_user_by_email(session, email)
     if not user:
         return None
-    if not verify_password(password, user.hashed_password):
-        return None
     if not user.is_active:
+        return None
+    if not verify_password(password, user.hashed_password):
         return None
     return user

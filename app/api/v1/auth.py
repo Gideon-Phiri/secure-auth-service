@@ -10,7 +10,8 @@ from app.schemas.token import Token
 from app.db.session import get_session
 from app.db.crud import create_user, authenticate_user, get_user_by_email
 from app.core.security import create_access_token, create_refresh_token
-from app.core.rate_limit import limiter
+from app.core.rate_limit import conditional_limit
+from app.core.logging import log_auth_success, log_auth_failure, log_account_lockout, log_security_event, SecurityEvent
 from app.db.models import User
 
 router = APIRouter()
@@ -56,18 +57,45 @@ def send_verification_email(email: str, token: str):
         print(f"Failed to send email: {e}")
 
 @router.post("/register", response_model=None, status_code=status.HTTP_201_CREATED)
-@limiter.limit("5/minute")
+@conditional_limit("5/minute")
 async def register(request: Request, user_in: UserCreate, session=Depends(get_session)):
-    validate_password_complexity(user_in.password)
-    existing = await create_user(session, user_in.email, user_in.password)
-    # Generate verification token
-    token = secrets.token_urlsafe(16)
-    existing.email_verification_token = token
-    existing.email_verified = False
-    await session.commit()
-    await session.refresh(existing)
-    send_verification_email(existing.email, token)
-    return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "user created, verification email sent", "id": str(existing.id)})
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "")
+    
+    try:
+        validate_password_complexity(user_in.password)
+        existing = await create_user(session, user_in.email, user_in.password)
+        # Generate verification token
+        token = secrets.token_urlsafe(16)
+        existing.email_verification_token = token
+        existing.email_verified = False
+        await session.commit()
+        await session.refresh(existing)
+        send_verification_email(existing.email, token)
+        
+        # Log successful registration
+        log_security_event(SecurityEvent(
+            event_type="user_registration",
+            user_id=str(existing.id),
+            email=existing.email,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            success=True,
+            details="User registered successfully"
+        ))
+        
+        return JSONResponse(status_code=status.HTTP_201_CREATED, content={"message": "user created, verification email sent", "id": str(existing.id)})
+    except Exception as e:
+        # Log failed registration
+        log_security_event(SecurityEvent(
+            event_type="user_registration",
+            email=user_in.email,
+            ip_address=client_ip,
+            user_agent=user_agent,
+            success=False,
+            details=str(e)
+        ))
+        raise
 @router.get("/verify-email")
 async def verify_email(token: str, session=Depends(get_session)):
     result = await session.execute(select(User).where(User.email_verification_token == token))
@@ -81,10 +109,14 @@ async def verify_email(token: str, session=Depends(get_session)):
 
 
 @router.post("/login", response_model=Token)
-@limiter.limit("10/minute")
+@conditional_limit("10/minute")
 async def login(request: Request, form_data: UserCreate, session=Depends(get_session)):
+    client_ip = request.client.host if request.client else "unknown"
+    user_agent = request.headers.get("user-agent", "")
+    
     user = await get_user_by_email(session, form_data.email)
     now = datetime.now(timezone.utc)
+    
     # Check if account is locked
     if user and user.locked_until:
         # Ensure locked_until is timezone-aware for comparison
@@ -92,7 +124,9 @@ async def login(request: Request, form_data: UserCreate, session=Depends(get_ses
         if locked_until.tzinfo is None:
             locked_until = locked_until.replace(tzinfo=timezone.utc)
         if locked_until > now:
+            log_auth_failure(form_data.email, client_ip, "Account locked", user_agent)
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=f"Account locked until {locked_until}")
+    
     # Authenticate user
     authed_user = await authenticate_user(session, form_data.email, form_data.password)
     if not authed_user:
@@ -103,14 +137,27 @@ async def login(request: Request, form_data: UserCreate, session=Depends(get_ses
             if user.failed_attempts >= 5:
                 user.locked_until = now + timedelta(minutes=15)
                 user.failed_attempts = 0
+                log_account_lockout(form_data.email, client_ip, user_agent)
             await session.commit()
             await session.refresh(user)
+            
+        log_auth_failure(form_data.email, client_ip, "Invalid credentials", user_agent)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect credentials")
+    
+    # Check if email is verified
+    if not authed_user.email_verified:
+        log_auth_failure(form_data.email, client_ip, "Email not verified", user_agent)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Email not verified")
+    
     # Reset failed_attempts on successful login
     authed_user.failed_attempts = 0
     authed_user.locked_until = None
     await session.commit()
     await session.refresh(authed_user)
+    
+    # Log successful login
+    log_auth_success(str(authed_user.id), authed_user.email, client_ip, user_agent)
+    
     access_token = create_access_token(subject=str(authed_user.id))
     refresh_token = create_refresh_token(subject=str(authed_user.id))
     return Token(access_token=access_token, refresh_token=refresh_token)

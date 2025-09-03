@@ -53,6 +53,8 @@ async def test_login_and_lockout(client: AsyncClient):
 async def test_rate_limiting(client: AsyncClient):
     email = "ratelimit@example.com"
     password = "StrongPassw0rd!"
+    from app.core.rate_limit import enable_test_rate_limits, disable_test_rate_limits
+    enable_test_rate_limits()
     # Register and verify
     r = await client.post("/auth/register", json={"email": email, "password": password})
     assert r.status_code == 201
@@ -65,7 +67,10 @@ async def test_rate_limiting(client: AsyncClient):
         token = user.email_verification_token
     await client.get(f"/auth/verify-email?token={token}")
     # Exceed login rate limit
-    for _ in range(11):
-        await client.post("/auth/login", json={"email": email, "password": password})
-    r_limited = await client.post("/auth/login", json={"email": email, "password": password})
-    assert r_limited.status_code == 429
+    try:
+        for _ in range(11):
+            await client.post("/auth/login", json={"email": email, "password": password})
+        r_limited = await client.post("/auth/login", json={"email": email, "password": password})
+        assert r_limited.status_code == 429
+    finally:
+        disable_test_rate_limits()

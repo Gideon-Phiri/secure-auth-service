@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
@@ -7,6 +8,8 @@ from slowapi.middleware import SlowAPIMiddleware
 from app.core.rate_limit import limiter
 from app.api.v1 import auth, users
 from app.core.config import settings
+from app.core.middleware import SecurityHeadersMiddleware, RequestLoggingMiddleware, HTTPSRedirectMiddleware
+from app.core.logging import logger
 
 
 app = FastAPI(
@@ -17,7 +20,12 @@ app = FastAPI(
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-app.add_middleware(SlowAPIMiddleware)
+
+# Add security middleware (order matters!)
+app.add_middleware(HTTPSRedirectMiddleware)  # First - redirect HTTP to HTTPS
+app.add_middleware(SecurityHeadersMiddleware)  # Second - add security headers
+app.add_middleware(RequestLoggingMiddleware)  # Third - log requests
+app.add_middleware(SlowAPIMiddleware)  # Fourth - rate limiting
 
 
 # Security Middleware
@@ -40,4 +48,8 @@ app.include_router(users.router, prefix="/users", tags=["users"])
 
 @app.get("/health")
 async def health():
+    logger.info("Health check requested")
     return {"status": "ok", "service": "secure-auth-service", "version": "0.1.0"}
+
+# Log application startup
+logger.info(f"Starting Secure Auth Service v0.1.0 - Debug mode: {settings.DEBUG}")

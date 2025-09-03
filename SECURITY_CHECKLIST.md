@@ -3,7 +3,7 @@
 ## ✅ COMPLETED FIXES
 
 ### Container Security
-- ✅ Changed from root user to `vscode` user  
+- ✅ Changed from root user to `meltah` user  
 - ✅ Added proper user creation in Dockerfile
 - ✅ Fixed file permissions
 
