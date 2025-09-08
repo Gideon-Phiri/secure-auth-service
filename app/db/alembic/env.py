@@ -1,17 +1,16 @@
+import sys
 from logging.config import fileConfig
-import os, sys
 from pathlib import Path
+
+from alembic import context
+from sqlalchemy import engine_from_config, pool
 
 # Add the project root to the Python path
 project_root = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(project_root))
 
-from sqlalchemy import engine_from_config
-from sqlalchemy import pool
-
-from alembic import context
-from app.db.base import SQLModel
-from app.core.config import settings
+from app.core.config import settings  # noqa: E402
+from app.db.base import SQLModel  # noqa: E402
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -27,7 +26,7 @@ if config.config_file_name is not None:
 target_metadata = SQLModel.metadata
 
 # Set the database URL from environment
-config.set_main_option('sqlalchemy.url', settings.DATABASE_URL)
+config.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
 
 # other values from the config, defined by the needs of env.py,
 # can be acquired:
@@ -73,9 +72,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

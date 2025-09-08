@@ -1,9 +1,12 @@
-from typing import Optional
-from sqlmodel import Session, select
-from sqlalchemy.ext.asyncio import AsyncSession
-from app.db.models import User
-from app.core.security import get_password_hash, verify_password
 import uuid
+from typing import Optional
+
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel import select
+
+from app.core.security import get_password_hash, verify_password
+from app.db.models import User
+
 
 async def get_user(session: AsyncSession, user_id: str) -> Optional[User]:
     """Get user by ID"""
@@ -15,11 +18,13 @@ async def get_user(session: AsyncSession, user_id: str) -> Optional[User]:
     except ValueError:
         return None
 
+
 async def get_user_by_email(session: AsyncSession, email: str) -> Optional[User]:
     """Get user by email"""
     statement = select(User).where(User.email == email)
     result = await session.execute(statement)
     return result.scalar_one_or_none()
+
 
 async def create_user(session: AsyncSession, email: str, password: str) -> User:
     """Create a new user"""
@@ -27,7 +32,7 @@ async def create_user(session: AsyncSession, email: str, password: str) -> User:
     existing_user = await get_user_by_email(session, email)
     if existing_user:
         raise ValueError("User with this email already exists")
-    
+
     # Create new user
     hashed_password = get_password_hash(password)
     user = User(
@@ -35,15 +40,18 @@ async def create_user(session: AsyncSession, email: str, password: str) -> User:
         email=email,
         hashed_password=hashed_password,
         is_active=True,
-        is_superuser=False
+        is_superuser=False,
     )
-    
+
     session.add(user)
     await session.commit()
     await session.refresh(user)
     return user
 
-async def authenticate_user(session: AsyncSession, email: str, password: str) -> Optional[User]:
+
+async def authenticate_user(
+    session: AsyncSession, email: str, password: str
+) -> Optional[User]:
     """Authenticate user with email and password"""
     user = await get_user_by_email(session, email)
     if not user:
