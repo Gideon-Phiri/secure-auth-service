@@ -1,11 +1,14 @@
-from typing import Optional
-from pydantic import BaseModel, EmailStr
 import uuid
 from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel, EmailStr
+
 
 class UserCreate(BaseModel):
     email: EmailStr
     password: str
+
 
 class UserRead(BaseModel):
     id: uuid.UUID
@@ -14,6 +17,7 @@ class UserRead(BaseModel):
     is_superuser: bool
     email_verified: bool
     created_at: datetime
+
 
 class UserUpdate(BaseModel):
     email: Optional[EmailStr] = None

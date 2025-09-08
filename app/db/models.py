@@ -1,10 +1,13 @@
-from typing import Optional
-from datetime import datetime, timezone
-from sqlmodel import SQLModel, Field
 import uuid
+from datetime import datetime, timezone
+from typing import Optional
+
+from sqlmodel import Field, SQLModel
+
 
 def utc_now():
     return datetime.now(timezone.utc)
+
 
 class User(SQLModel, table=True):
     id: Optional[uuid.UUID] = Field(default=None, primary_key=True)
